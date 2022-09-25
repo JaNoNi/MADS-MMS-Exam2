@@ -1,0 +1,89 @@
+import logging
+import os
+import urllib.request
+import zipfile
+
+import pandas as pd
+from tqdm import tqdm
+
+logging.basicConfig(level=logging.INFO)
+
+
+class DownloadProgressbar(tqdm):
+    def update_to(self, block=1, block_size=1, total_size=None):
+        if total_size is not None:
+            self.total = total_size
+        self.update(block * block_size - self.n)
+
+
+def create_activity_window(df_dict: dict[str, pd.DataFrame], agg_funcs: list, start: int, end: int):
+    # Combine accelerometer and gyroscope data
+    exp_types = list(df_dict.keys())
+    first_type = exp_types.pop(0)
+    df = pd.DataFrame(df_dict[first_type]).add_prefix(f"{first_type}_")
+    for sub_type in exp_types:
+        df = pd.merge(
+            df,
+            pd.DataFrame(df_dict[sub_type]).add_prefix(f"{sub_type}_"),
+            left_index=True,
+            right_index=True,
+        )
+
+    # Pivot wide
+    df_stacked = df.iloc[start:end, :].agg(agg_funcs).stack().swaplevel()
+    df_stacked.index = df_stacked.index.map("{0[1]}_{0[0]}".format)
+    return df_stacked.to_frame().T
+
+
+def download_raw_data(url: str, output_path: str):
+    with DownloadProgressbar(
+        unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]
+    ) as t_bar:
+        urllib.request.urlretrieve(url, filename=output_path, reporthook=t_bar.update_to)
+
+
+def open_raw_data(path_to_data: str, exp_type: str, exp_id: int, user_id: int) -> pd.DataFrame:
+    filename = f"{exp_type}_exp{exp_id:02d}_user{user_id:02d}.txt"
+    filedir = os.path.join(path_to_data, "RawData", filename)
+    activity = pd.read_csv(filedir, sep=" ", header=None, names=["x", "y", "z"])
+    return activity
+
+
+def setup_raw_data(url: str, output_path: str):
+    os.makedirs(output_path, exist_ok=True)
+    # Download raw data
+    output_file = os.path.join(output_path, "RawData.zip")
+    download_raw_data(url, output_file)
+    # Unzip raw data
+    with zipfile.ZipFile(output_file, "r") as zip_ref:
+        zip_ref.extractall(output_path)
+
+    # Check if all files are present
+    req_files = [
+        "activity_labels.txt",
+        "features.txt",
+        "features_info.txt",
+        "RawData",
+        "README.txt",
+        "Test",
+        "Train",
+    ]
+    logging.info("Checking if all files are present...")
+    found_files = [_dir for _dir in os.listdir(output_path) if _dir in req_files]
+    if len(found_files) == len(req_files):
+        logging.info("All files are present")
+        # Remove zip file
+        os.remove(output_file)
+    else:
+        raise FileNotFoundError(
+            "Something went wrong. Please extract the zip file manually. "
+            f"Your '{output_path}'-folder should contain the following files: {req_files}"
+        )
+
+
+def main():
+    return ()
+
+
+if __name__ == "__main__":
+    main()
