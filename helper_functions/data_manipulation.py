@@ -49,14 +49,26 @@ def open_raw_data(path_to_data: str, exp_type: str, exp_id: int, user_id: int) -
     return activity
 
 
-def setup_raw_data(url: str, output_path: str):
-    os.makedirs(output_path, exist_ok=True)
+def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData.zip"):
+    if os.path.isdir(path_to_data):
+        if os.path.isfile(f"data/{file_name}"):
+            logging.info("Found the correct data.")
+            return
+        else:
+            logging.info(
+                "Data folder found, but it does not contain the right data. Downloading..."
+            )
+    else:
+        logging.info("Data folder not found. Downloading...")
+        print("Data not found. Downloading...")
+
+    os.makedirs(path_to_data, exist_ok=True)
     # Download raw data
-    output_file = os.path.join(output_path, "RawData.zip")
+    output_file = os.path.join(path_to_data, file_name)
     download_raw_data(url, output_file)
     # Unzip raw data
     with zipfile.ZipFile(output_file, "r") as zip_ref:
-        zip_ref.extractall(output_path)
+        zip_ref.extractall(path_to_data)
 
     # Check if all files are present
     req_files = [
@@ -69,7 +81,7 @@ def setup_raw_data(url: str, output_path: str):
         "Train",
     ]
     logging.info("Checking if all files are present...")
-    found_files = [_dir for _dir in os.listdir(output_path) if _dir in req_files]
+    found_files = [_dir for _dir in os.listdir(path_to_data) if _dir in req_files]
     if len(found_files) == len(req_files):
         logging.info("All files are present")
         # Remove zip file
@@ -77,7 +89,7 @@ def setup_raw_data(url: str, output_path: str):
     else:
         raise FileNotFoundError(
             "Something went wrong. Please extract the zip file manually. "
-            f"Your '{output_path}'-folder should contain the following files: {req_files}"
+            f"Your '{path_to_data}'-folder should contain the following files: {req_files}"
         )
 
 
