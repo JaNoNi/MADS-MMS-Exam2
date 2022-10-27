@@ -49,9 +49,9 @@ def open_raw_data(path_to_data: str, exp_type: str, exp_id: int, user_id: int) -
     return activity
 
 
-def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData.zip"):
+def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData"):
     if os.path.isdir(path_to_data):
-        if os.path.isfile(f"data/{file_name}"):
+        if os.path.isdir(f"data/{file_name}"):
             logging.info("Found the correct data.")
             return
         else:
@@ -65,7 +65,7 @@ def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData.zip"):
     os.makedirs(path_to_data, exist_ok=True)
     # Download raw data
     output_file = os.path.join(path_to_data, file_name)
-    download_raw_data(url, output_file)
+    download_raw_data(url, f"{output_file}.zip")
     # Unzip raw data
     with zipfile.ZipFile(output_file, "r") as zip_ref:
         zip_ref.extractall(path_to_data)

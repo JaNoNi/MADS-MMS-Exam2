@@ -1,5 +1,6 @@
 import itertools
 import math
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import matplotlib.patches as mpatches
@@ -10,7 +11,30 @@ import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
 
-CMAP_PLT = {0: "red", 1: "darkorange", 2: "gold", 3: "lawngreen", 4: "lightseagreen", 5: "blue"}
+CMAP_PLT = {
+    -1: "black",
+    0: "red",
+    1: "darkorange",
+    2: "gold",
+    3: "lawngreen",
+    4: "lightseagreen",
+    5: "blue",
+    6: "darkviolet",
+    7: "deeppink",
+    8: "brown",
+    9: "grey",
+    10: "yellow",
+    11: "green",
+    12: "cyan",
+}
+
+
+@dataclass
+class OPTICSResults:
+    space: list[int]
+    reachability: list[float]
+    targets: list[int]
+    params: dict
 
 
 def __basic_cluster(x, y, hue, alpha, ax=None):
@@ -207,7 +231,7 @@ def draw_boxplot(data, hue, labels, ax):
 def draw_plot(
     data,
     plot_type: str = "scatter",
-    targets=None,
+    hue=None,
     alpha=None,
     labels: Optional[list[str]] = None,
     figsize: Optional[tuple[int, int]] = None,
@@ -221,8 +245,8 @@ def draw_plot(
     random_state: Optional[int] = None,
     no_zero: bool = False,
 ):
-    if no_zero and targets is not None:
-        targets = targets + 1
+    if no_zero and hue is not None:
+        hue = hue + 1
     _, axes = plt.subplots(figsize=figsize, dpi=dpi, nrows=grid_size[0], ncols=grid_size[1])
     if plot_type == "scatter":
         # Create indexes
@@ -230,7 +254,7 @@ def draw_plot(
             data,
             alpha=alpha,
             centers=centers,
-            hue=targets,
+            hue=hue,
             labels=labels,
             legend_loc=legend_loc,
             axes=axes,
@@ -242,9 +266,9 @@ def draw_plot(
             data, ks, labels=labels, ax=axes, random_state=random_state, no_zero=no_zero
         )
     elif plot_type == "boxplot":
-        draw_boxplot(data, targets, labels=labels, ax=axes)
+        draw_boxplot(data, hue, labels=labels, ax=axes)
     elif plot_type == "reachability":
-        draw_reachability_grid(data, targets, labels=labels, axes=axes)
+        draw_reachability_grid(data, alpha=alpha, labels=labels, legend_loc=legend_loc, axes=axes)
     else:
         raise ValueError(f"Plot type {plot_type} not supported")
 
@@ -257,30 +281,57 @@ def draw_plot(
     plt.show()
 
 
-def draw_reachability_grid(data, targets, labels, axes):
+def draw_reachability_grid(
+    data: Union[OPTICSResults, list[OPTICSResults]],
+    alpha: Optional[float],
+    labels: Optional[list[str]],
+    legend_loc: str,
+    axes: list[list[plt.Axes]],
+):
     if isinstance(axes, np.ndarray):
+        if not isinstance(data, list):
+            raise TypeError("Data must be a list of OPTICSResults")
         if len(axes.shape) == 1:
             for _data, ax in zip(data, axes):
-                _draw_reachability(_data, targets=targets, labels=labels, ax=ax)
+                _draw_reachability(_data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=ax)
         else:
             grid_size_combinations = [list(range(axes.shape[0])), list(range(axes.shape[1]))]
             figure_combinations = list(itertools.product(*grid_size_combinations))
             for _data, (ax_1, ax_2) in zip(data, figure_combinations):
-                _draw_reachability(_data, targets=targets, labels=labels, ax=axes[ax_1, ax_2])
+                _draw_reachability(
+                    _data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=axes[ax_1, ax_2]
+                )
+    elif isinstance(axes, plt.Axes):
+        if isinstance(data, list):
+            raise TypeError("Data must be a OPTICSResults")
+        _draw_reachability(data=data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=axes)
     else:
-        _draw_reachability(data=data, targets=targets, labels=labels, ax=axes)
+        raise TypeError("Axes must be a list of Axes or a single Axes")
 
 
-def _draw_reachability(data, targets, labels, ax):
-    space = data["space"]
-    reachability = data["reachability"]
-    for klass in np.unique(targets):
-        if klass < 0:
-            ax.plot(space[targets == klass], reachability[targets == klass], "k.", alpha=0.3)
-            continue
-        Xk = space[targets == klass]
-        Rk = reachability[targets == klass]
-        ax.plot(Xk, Rk, c=CMAP_PLT[klass], alpha=0.3)
+def _draw_reachability(
+    data: OPTICSResults,
+    alpha: Optional[float],
+    labels: Optional[list[str]],
+    legend_loc: str,
+    ax: plt.Axes,
+):
+    classes = np.unique(data.targets)
+    for clas in list(classes):
+        Xk = data.space[data.targets == clas]
+        Rk = data.reachability[data.targets == clas]
+        try:
+            ax.plot(Xk, Rk, c=CMAP_PLT[clas], label=clas, alpha=alpha, size=1)
+        except KeyError:
+            ax.plot(Xk, Rk, label=clas, alpha=alpha)
+            print(f"Class {clas} not found in CMAP_PLT")
+        title = (
+            f"Parameters: 'min_samples': {data.params['min_samples']}"
+            f" 'metric': {data.params['metric']}"
+            f" 'xi': {data.params['xi']}"
+        )
+        ax.set_title(title)
+    # ax.legend(loc=legend_loc)
     if labels is not None:
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])
