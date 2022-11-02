@@ -10,6 +10,7 @@ import pandas as pd
 import seaborn as sns
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
+from tqdm import tqdm
 
 CMAP_PLT = {
     -1: "black",
@@ -26,6 +27,8 @@ CMAP_PLT = {
     10: "yellow",
     11: "green",
     12: "cyan",
+    13: "magenta",
+    14: "pink",
 }
 
 
@@ -120,7 +123,7 @@ def draw_ksscore(data, ks, labels, ax, random_state=None):
         ks (list): List containing all choices for k.
     """
     sscore = []
-    for k in ks:
+    for k in tqdm(ks):
         kkm = KMeans(
             n_clusters=k, random_state=random_state, init="k-means++", max_iter=300, tol=0.0001
         )
@@ -244,6 +247,7 @@ def draw_plot(
     centers: Optional[np.ndarray] = None,
     random_state: Optional[int] = None,
     no_zero: bool = False,
+    top_cut_off: Optional[float] = None,
 ):
     if no_zero and hue is not None:
         hue = hue + 1
@@ -268,7 +272,14 @@ def draw_plot(
     elif plot_type == "boxplot":
         draw_boxplot(data, hue, labels=labels, ax=axes)
     elif plot_type == "reachability":
-        draw_reachability_grid(data, alpha=alpha, labels=labels, legend_loc=legend_loc, axes=axes)
+        draw_reachability_grid(
+            data,
+            alpha=alpha,
+            labels=labels,
+            legend_loc=legend_loc,
+            top_cut_off=top_cut_off,
+            axes=axes,
+        )
     else:
         raise ValueError(f"Plot type {plot_type} not supported")
 
@@ -285,6 +296,7 @@ def draw_reachability_grid(
     data: Union[OPTICSResults, list[OPTICSResults]],
     alpha: Optional[float],
     labels: Optional[list[str]],
+    top_cut_off: Optional[float],
     legend_loc: str,
     axes: list[list[plt.Axes]],
 ):
@@ -293,18 +305,37 @@ def draw_reachability_grid(
             raise TypeError("Data must be a list of OPTICSResults")
         if len(axes.shape) == 1:
             for _data, ax in zip(data, axes):
-                _draw_reachability(_data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=ax)
+                _draw_reachability(
+                    _data,
+                    alpha=alpha,
+                    labels=labels,
+                    legend_loc=legend_loc,
+                    top_cut_off=top_cut_off,
+                    ax=ax,
+                )
         else:
             grid_size_combinations = [list(range(axes.shape[0])), list(range(axes.shape[1]))]
             figure_combinations = list(itertools.product(*grid_size_combinations))
             for _data, (ax_1, ax_2) in zip(data, figure_combinations):
                 _draw_reachability(
-                    _data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=axes[ax_1, ax_2]
+                    _data,
+                    alpha=alpha,
+                    labels=labels,
+                    legend_loc=legend_loc,
+                    top_cut_off=top_cut_off,
+                    ax=axes[ax_1, ax_2],
                 )
     elif isinstance(axes, plt.Axes):
         if isinstance(data, list):
             raise TypeError("Data must be a OPTICSResults")
-        _draw_reachability(data=data, alpha=alpha, labels=labels, legend_loc=legend_loc, ax=axes)
+        _draw_reachability(
+            data=data,
+            alpha=alpha,
+            labels=labels,
+            legend_loc=legend_loc,
+            top_cut_off=top_cut_off,
+            ax=axes,
+        )
     else:
         raise TypeError("Axes must be a list of Axes or a single Axes")
 
@@ -313,6 +344,7 @@ def _draw_reachability(
     data: OPTICSResults,
     alpha: Optional[float],
     labels: Optional[list[str]],
+    top_cut_off: Optional[float],
     legend_loc: str,
     ax: plt.Axes,
 ):
@@ -321,17 +353,22 @@ def _draw_reachability(
         Xk = data.space[data.targets == clas]
         Rk = data.reachability[data.targets == clas]
         try:
-            ax.plot(Xk, Rk, c=CMAP_PLT[clas], label=clas, alpha=alpha, size=1)
+            if clas == -1:
+                ax.plot(Xk, Rk, "k.", alpha=0.3)
+            else:
+                ax.plot(Xk, Rk, c=CMAP_PLT[clas], label=clas, alpha=alpha, marker=".")
         except KeyError:
-            ax.plot(Xk, Rk, label=clas, alpha=alpha)
-            print(f"Class {clas} not found in CMAP_PLT")
+            ax.plot(Xk, Rk, label=clas, alpha=alpha, marker=".")
         title = (
             f"Parameters: 'min_samples': {data.params['min_samples']}"
             f" 'metric': {data.params['metric']}"
             f" 'xi': {data.params['xi']}"
+            f" 'min_cluster_size': {data.params['min_cluster_size']}"
         )
         ax.set_title(title)
     # ax.legend(loc=legend_loc)
+    if top_cut_off is not None:
+        ax.set_ylim(0, top_cut_off)
     if labels is not None:
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])

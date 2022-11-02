@@ -36,9 +36,7 @@ def create_activity_window(df_dict: dict[str, pd.DataFrame], agg_funcs: list, st
 
 
 def download_raw_data(url: str, output_path: str):
-    with DownloadProgressbar(
-        unit="B", unit_scale=True, miniters=1, desc=url.split("/")[-1]
-    ) as t_bar:
+    with DownloadProgressbar(unit="B", unit_scale=True, miniters=1, desc=output_path) as t_bar:
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t_bar.update_to)
 
 
@@ -51,7 +49,7 @@ def open_raw_data(path_to_data: str, exp_type: str, exp_id: int, user_id: int) -
 
 def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData"):
     if os.path.isdir(path_to_data):
-        if os.path.isdir(f"data/{file_name}"):
+        if os.path.isfile(f"{path_to_data}/{file_name}"):
             logging.info("Found the correct data.")
             return
         else:
@@ -64,28 +62,23 @@ def setup_raw_data(url: str, path_to_data: str, file_name: str = "RawData"):
 
     os.makedirs(path_to_data, exist_ok=True)
     # Download raw data
-    output_file = os.path.join(path_to_data, file_name)
-    download_raw_data(url, f"{output_file}.zip")
+    output_file = url.split("/")[-1]
+    output_file_path = os.path.join(path_to_data, output_file)
+    download_raw_data(url, output_file_path)
     # Unzip raw data
-    with zipfile.ZipFile(output_file, "r") as zip_ref:
-        zip_ref.extractall(path_to_data)
+    if zipfile.is_zipfile(output_file_path):
+        with zipfile.ZipFile(output_file_path, "r") as zip_ref:
+            zip_ref.extractall(path_to_data)
 
     # Check if all files are present
-    req_files = [
-        "activity_labels.txt",
-        "features.txt",
-        "features_info.txt",
-        "RawData",
-        "README.txt",
-        "Test",
-        "Train",
-    ]
+    req_files = [file_name]
     logging.info("Checking if all files are present...")
     found_files = [_dir for _dir in os.listdir(path_to_data) if _dir in req_files]
     if len(found_files) == len(req_files):
         logging.info("All files are present")
         # Remove zip file
-        os.remove(output_file)
+        if zipfile.is_zipfile(output_file_path):
+            os.remove(output_file_path)
     else:
         raise FileNotFoundError(
             "Something went wrong. Please extract the zip file manually. "
