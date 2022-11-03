@@ -91,8 +91,8 @@ def draw_clusters_grid(
                 else:
                     labels_ = labels
                 __draw_clusters(
-                    data[:, comb_1],
-                    data[:, comb_2],
+                    data.iloc[:, comb_1],
+                    data.iloc[:, comb_2],
                     ax=axes[ax_1, ax_2],
                     alpha=alpha,
                     centers=centers_,
@@ -102,8 +102,8 @@ def draw_clusters_grid(
                 )
     else:
         __draw_clusters(
-            data[:, 0],
-            data[:, 1],
+            data.iloc[:, 0],
+            data.iloc[:, 1],
             alpha=alpha,
             centers=centers,
             hue=hue,
