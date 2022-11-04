@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from scipy.cluster import hierarchy
+from scipy.cluster.hierarchy import dendrogram
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
 from tqdm import tqdm
@@ -113,7 +115,57 @@ def draw_clusters_grid(
         )
 
 
-def draw_ksscore(data, ks, labels, ax, random_state=None):
+def __basic_hist(data, x, ax=None):
+    if ax is None:
+        ax = plt.gca()
+    sns.histplot(data=data, x=x, ax=ax)
+
+
+def __draw_hist(data, x, ax, labels=None):
+    __basic_hist(data, x, ax=ax)
+    if labels is not None:
+        ax.set_xlabel(labels[0])
+        ax.set_ylabel(labels[1])
+
+
+def draw_hist_grid(
+    data,
+    axes,
+    labels: Optional[list[str]] = None,
+):
+    if isinstance(axes, np.ndarray):
+        if len(axes.shape) == 1:
+            raise ValueError("Not implemented.")
+        else:
+            grid_size_combinations = [list(range(axes.shape[0])), list(range(axes.shape[1]))]
+            figure_combinations = list(itertools.product(*grid_size_combinations))
+            feature_combinations = data.columns
+            if len(feature_combinations) > len(figure_combinations):
+                raise ValueError("The grid size is smaller than the number of features.")
+            # Plot
+            for comb_1, (ax_1, ax_2) in zip(feature_combinations, figure_combinations):
+                if labels is not None:
+                    labels_ = [f"{labels[0]}_{comb_1}", labels[1]]
+                else:
+                    labels_ = labels
+                __draw_hist(
+                    data=data,
+                    x=comb_1,
+                    ax=axes[ax_1, ax_2],
+                    labels=labels_,
+                )
+    else:
+        __draw_hist(
+            data,
+            data.columns[0],
+            labels=labels,
+            ax=axes,
+        )
+
+
+def draw_ksscore(
+    data, ks, labels, ax, random_state=None, kmeansparams: dict[str, str] = {"init": "k-means++"}
+):
     """
     Function that takes an array (or tuple of arrays) and calculates the silhouette scores for the
     different ks. Plots the silhouette scores against the ks and saves the image as a pdf.
@@ -124,9 +176,7 @@ def draw_ksscore(data, ks, labels, ax, random_state=None):
     """
     sscore = []
     for k in tqdm(ks):
-        kkm = KMeans(
-            n_clusters=k, random_state=random_state, init="k-means++", max_iter=300, tol=0.0001
-        )
+        kkm = KMeans(n_clusters=k, random_state=random_state, **kmeansparams)
         cluster_labels = kkm.fit_predict(data)
         sscore.append(silhouette_score(data, cluster_labels))
     ax.plot(ks, sscore)
@@ -137,17 +187,24 @@ def draw_ksscore(data, ks, labels, ax, random_state=None):
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])
     print(f"Max score: {max(sscore)}")
+    return sscore
 
 
-def draw_silhouette(data, number_k, labels, ax, random_state=None, no_zero=False):
+def draw_silhouette(
+    data,
+    number_k,
+    labels,
+    ax,
+    random_state=None,
+    no_zero=False,
+    kmeansparams: dict[str, str] = {"init": "k-means++"},
+):
     """Creates Silhouette plot for the given dataset.
 
     Credit:
     https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html
     """
-    kkm = KMeans(
-        n_clusters=number_k, random_state=random_state, init="k-means++", max_iter=300, tol=0.0001
-    )
+    kkm = KMeans(n_clusters=number_k, random_state=random_state, **kmeansparams)
     cluster_labels = kkm.fit_predict(data)
     if no_zero:
         cluster_labels = cluster_labels + 1
@@ -231,6 +288,21 @@ def draw_boxplot(data, hue, labels, ax):
             ax[ax_1, ax_2].set_ylabel(f"{labels[1]}_{column}")
 
 
+def draw_dendo(agg, cut: int, dendo_distance: str, labels, ax):
+    hierarchy.set_link_color_palette(list(CMAP_PLT.values())[1:])
+    dendrogram(
+        hierarchy.linkage(agg.children_, dendo_distance),
+        color_threshold=cut,
+        no_labels=True,
+        leaf_rotation=0,
+        ax=ax,
+    )
+    ax.axhline(y=cut, color="black", linestyle="--")
+    if labels is not None:
+        ax.set_xlabel(labels[0])
+        ax.set_ylabel(labels[1])
+
+
 def draw_plot(
     data,
     plot_type: str = "scatter",
@@ -248,13 +320,16 @@ def draw_plot(
     random_state: Optional[int] = None,
     no_zero: bool = False,
     top_cut_off: Optional[float] = None,
+    dendo_cut: int = None,
+    dendo_distance: str = "euclidean",
+    kmeansparams: dict[str, str] = {"init": "k-means++"},
 ):
     if no_zero and hue is not None:
         hue = hue + 1
     _, axes = plt.subplots(figsize=figsize, dpi=dpi, nrows=grid_size[0], ncols=grid_size[1])
     if plot_type == "scatter":
         # Create indexes
-        draw_clusters_grid(
+        return_result = draw_clusters_grid(
             data,
             alpha=alpha,
             centers=centers,
@@ -263,16 +338,30 @@ def draw_plot(
             legend_loc=legend_loc,
             axes=axes,
         )
+    elif plot_type == "histplot":
+        return_result = draw_hist_grid(data, labels=labels, axes=axes)
     elif plot_type == "ksscore":
-        draw_ksscore(data, ks, labels=labels, ax=axes, random_state=random_state)
+        return_result = draw_ksscore(
+            data, ks, labels=labels, ax=axes, random_state=random_state, kmeansparams=kmeansparams
+        )
     elif plot_type == "silhouette":
-        draw_silhouette(
-            data, ks, labels=labels, ax=axes, random_state=random_state, no_zero=no_zero
+        return_result = draw_silhouette(
+            data,
+            ks,
+            labels=labels,
+            ax=axes,
+            random_state=random_state,
+            no_zero=no_zero,
+            kmeansparams=kmeansparams,
         )
     elif plot_type == "boxplot":
-        draw_boxplot(data, hue, labels=labels, ax=axes)
+        return_result = draw_boxplot(data, hue, labels=labels, ax=axes)
+    elif plot_type == "dendo":
+        return_result = draw_dendo(
+            data, dendo_cut, dendo_distance=dendo_distance, labels=labels, ax=axes
+        )
     elif plot_type == "reachability":
-        draw_reachability_grid(
+        return_result = draw_reachability_grid(
             data,
             alpha=alpha,
             labels=labels,
@@ -290,6 +379,7 @@ def draw_plot(
         plt.suptitle(title)
     plt.tight_layout()
     plt.show()
+    return return_result
 
 
 def draw_reachability_grid(
