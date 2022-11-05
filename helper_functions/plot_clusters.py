@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import dendrogram
-from sklearn.cluster import KMeans
+from sklearn.cluster import OPTICS, KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
 from tqdm import tqdm
 
@@ -36,6 +36,7 @@ CMAP_PLT = {
 
 @dataclass
 class OPTICSResults:
+    optics: OPTICS
     space: list[int]
     reachability: list[float]
     targets: list[int]
@@ -165,7 +166,7 @@ def draw_hist_grid(
 
 def draw_ksscore(
     data, ks, labels, ax, random_state=None, kmeansparams: dict[str, str] = {"init": "k-means++"}
-):
+) -> list[int]:
     """
     Function that takes an array (or tuple of arrays) and calculates the silhouette scores for the
     different ks. Plots the silhouette scores against the ks and saves the image as a pdf.
@@ -198,7 +199,7 @@ def draw_silhouette(
     random_state=None,
     no_zero=False,
     kmeansparams: dict[str, str] = {"init": "k-means++"},
-):
+) -> list[int]:
     """Creates Silhouette plot for the given dataset.
 
     Credit:
@@ -260,6 +261,7 @@ def draw_silhouette(
         ax.set_ylabel(labels[1])
     ax.axvline(x=sscore, color="red", linestyle="--")
     ax.set_yticks([])  # Clear the yaxis labels / ticks
+    return cluster_labels
 
 
 def draw_boxplot(data, hue, labels, ax):
@@ -288,10 +290,27 @@ def draw_boxplot(data, hue, labels, ax):
             ax[ax_1, ax_2].set_ylabel(f"{labels[1]}_{column}")
 
 
-def draw_dendo(agg, cut: int, dendo_distance: str, labels, ax):
+def create_linkage(agg):
+    n_samples = len(agg.labels_)
+    counts = np.zeros(agg.children_.shape[0])
+    for i, merge in enumerate(agg.children_):
+        current_count = 0
+        # print (i, merge)
+        for child_idx in merge:
+            if child_idx < n_samples:
+                current_count += 1  # leaf node
+            else:
+                current_count += counts[child_idx - n_samples]
+        counts[i] = current_count
+    linkage_matrix = np.column_stack([agg.children_, agg.distances_, counts]).astype(float)
+    return linkage_matrix
+
+
+def draw_dendo(agg, cut: int, dendo_distance: str, labels, ax) -> list[int]:
     hierarchy.set_link_color_palette(list(CMAP_PLT.values())[1:])
-    dendrogram(
-        hierarchy.linkage(agg.children_, dendo_distance),
+    dn = dendrogram(
+        create_linkage(agg),
+        # hierarchy.linkage(agg.children_, dendo_distance),
         color_threshold=cut,
         no_labels=True,
         leaf_rotation=0,
@@ -301,6 +320,11 @@ def draw_dendo(agg, cut: int, dendo_distance: str, labels, ax):
     if labels is not None:
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])
+    flipped_CMAP_PLT = {value: key for key, value in CMAP_PLT.items()}
+    try:
+        return [flipped_CMAP_PLT[color] for color in dn["leaves_color_list"]]
+    except KeyError:
+        return None
 
 
 def draw_plot(
