@@ -16,25 +16,6 @@ class DownloadProgressbar(tqdm):
         self.update(block * block_size - self.n)
 
 
-def create_activity_window(df_dict: dict[str, pd.DataFrame], agg_funcs: list, start: int, end: int):
-    # Combine accelerometer and gyroscope data
-    exp_types = list(df_dict.keys())
-    first_type = exp_types.pop(0)
-    df = pd.DataFrame(df_dict[first_type]).add_prefix(f"{first_type}_")
-    for sub_type in exp_types:
-        df = pd.merge(
-            df,
-            pd.DataFrame(df_dict[sub_type]).add_prefix(f"{sub_type}_"),
-            left_index=True,
-            right_index=True,
-        )
-
-    # Pivot wide
-    df_stacked = df.iloc[start:end, :].agg(agg_funcs).stack().swaplevel()
-    df_stacked.index = df_stacked.index.map("{0[1]}_{0[0]}".format)
-    return df_stacked.to_frame().T
-
-
 def download_raw_data(url: str, output_path: str):
     with DownloadProgressbar(unit="B", unit_scale=True, miniters=1, desc=output_path) as t_bar:
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t_bar.update_to)

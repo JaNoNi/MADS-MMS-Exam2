@@ -116,23 +116,30 @@ def draw_clusters_grid(
         )
 
 
-def __basic_hist(data, x, ax=None):
+def __basic_hist(data, x, ax=None, bins=None):
     if ax is None:
         ax = plt.gca()
-    sns.histplot(data=data, x=x, ax=ax)
+    if bins is not None:
+        sns.histplot(data=data, x=x, ax=ax, bins=bins)
+    else:
+        sns.histplot(data=data, x=x, ax=ax)
 
 
-def __draw_hist(data, x, ax, labels=None):
-    __basic_hist(data, x, ax=ax)
+def __draw_hist(data, x, ax, labels=None, ylim=None, bins=None):
+    __basic_hist(data, x, ax=ax, bins=bins)
     if labels is not None:
         ax.set_xlabel(labels[0])
         ax.set_ylabel(labels[1])
+    if ylim is not None:
+        ax.set_ylim(ylim)
 
 
 def draw_hist_grid(
     data,
     axes,
     labels: Optional[list[str]] = None,
+    ylim: Optional[tuple[float, float]] = None,
+    bins: Optional[int] = None,
 ):
     if isinstance(axes, np.ndarray):
         if len(axes.shape) == 1:
@@ -150,18 +157,10 @@ def draw_hist_grid(
                 else:
                     labels_ = labels
                 __draw_hist(
-                    data=data,
-                    x=comb_1,
-                    ax=axes[ax_1, ax_2],
-                    labels=labels_,
+                    data=data, x=comb_1, ax=axes[ax_1, ax_2], labels=labels_, ylim=ylim, bins=bins
                 )
     else:
-        __draw_hist(
-            data,
-            data.columns[0],
-            labels=labels,
-            ax=axes,
-        )
+        __draw_hist(data, data.columns[0], labels=labels, ax=axes, ylim=ylim, bins=bins)
 
 
 def draw_ksscore(
@@ -344,6 +343,8 @@ def draw_plot(
     random_state: Optional[int] = None,
     no_zero: bool = False,
     top_cut_off: Optional[float] = None,
+    ylim: Optional[tuple[float, float]] = None,
+    bins: Optional[int] = None,
     dendo_cut: int = None,
     dendo_distance: str = "euclidean",
     kmeansparams: dict[str, str] = {"init": "k-means++"},
@@ -363,7 +364,7 @@ def draw_plot(
             axes=axes,
         )
     elif plot_type == "histplot":
-        return_result = draw_hist_grid(data, labels=labels, axes=axes)
+        return_result = draw_hist_grid(data, labels=labels, axes=axes, ylim=ylim, bins=bins)
     elif plot_type == "ksscore":
         return_result = draw_ksscore(
             data, ks, labels=labels, ax=axes, random_state=random_state, kmeansparams=kmeansparams
@@ -414,6 +415,9 @@ def draw_reachability_grid(
     legend_loc: str,
     axes: list[list[plt.Axes]],
 ):
+    """Checks if the data is a list of OPTICSResults and if so, draws a grid of reachability plots.
+    If not, it draws a single reachability plot.
+    """
     if isinstance(axes, np.ndarray):
         if not isinstance(data, list):
             raise TypeError("Data must be a list of OPTICSResults")
